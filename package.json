@@ -1,0 +1,47 @@
+{
+  "name": "@oxog/hyperlog",
+  "version": "1.0.0",
+  "description": "Ultra-fast, zero-dependency Node.js logger with advanced features",
+  "keywords": ["logger", "logging", "log", "fast", "performance", "zero-dependency"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "hyperlog": "./dist/cli/index.js"
+  },
+  "preferGlobal": false,
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --coverage",
+    "bench": "node benchmarks/index.js",
+    "lint": "eslint src/**/*.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "author": "Ersin Koç",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.19",
+    "@typescript-eslint/eslint-plugin": "^7.0.2",
+    "@typescript-eslint/parser": "^7.0.2",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.3.3"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ersinkoc/hyperlog.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ersinkoc/hyperlog/issues"
+  },
+  "homepage": "https://github.com/ersinkoc/hyperlog#readme"
+}
