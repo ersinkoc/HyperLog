@@ -139,7 +139,32 @@ describe('FileRotator', () => {
       compressSpy.mockRestore();
     });
 
+    it('should successfully compress rotated files', async () => {
+      const rotator = new FileRotator({
+        filename: testFile,
+        compress: true,
+        compressionLevel: 9
+      });
+      
+      // Create test file with content
+      fs.writeFileSync(testFile, 'test content to compress');
+      
+      await rotator.rotate();
+      
+      // Check that compressed file exists
+      const files = fs.readdirSync(testDir);
+      const gzFiles = files.filter(f => f.endsWith('.gz'));
+      expect(gzFiles.length).toBe(1);
+      
+      // Verify original log file was removed
+      expect(fs.existsSync(testFile + '.1')).toBe(false);
+    });
+
     it('should handle compression errors', async () => {
+      // Mock console.error to suppress output
+      const originalError = console.error;
+      console.error = jest.fn();
+      
       const rotator = new FileRotator({
         filename: testFile,
         compress: true
@@ -154,6 +179,12 @@ describe('FileRotator', () => {
       
       // Should not throw
       await expect(rotator.rotate()).resolves.not.toThrow();
+      
+      // Verify console.error was called
+      expect(console.error).toHaveBeenCalledWith('Rotation error:', mockError);
+      
+      // Restore console.error
+      console.error = originalError;
     });
   });
 

@@ -18,6 +18,12 @@ describe('Logger Advanced Features', () => {
     });
   });
 
+  afterEach(async () => {
+    if (logger) {
+      await logger.close();
+    }
+  });
+
   describe('sampling', () => {
     it('should sample logs when enabled', () => {
       logger = new Logger({
@@ -181,7 +187,8 @@ describe('Logger Advanced Features', () => {
       logger.info('Test message');
 
       await new Promise(resolve => setTimeout(resolve, 50));
-
+      
+      await logger.close();
       console.log = originalLog;
     });
 
@@ -611,7 +618,7 @@ describe('Logger Advanced Features', () => {
       expect(logs[0].nullValue).toBe(null); // null should pass through line 201
     });
 
-    it('should trigger constructor with all option paths (line 35)', () => {
+    it('should trigger constructor with all option paths (line 35)', async () => {
       // Ensure line 35 (constructor) is covered by testing various constructor options
       const loggerWithOptions = new Logger({
         level: 'debug',
@@ -634,6 +641,9 @@ describe('Logger Advanced Features', () => {
       expect(loggerWithOptions).toBeDefined();
       loggerWithOptions.info('test');
       expect(logs.length).toBeGreaterThanOrEqual(0); // May be sampled
+      
+      // Clean up metrics interval
+      await loggerWithOptions.close();
     });
   });
 });

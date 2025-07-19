@@ -36,10 +36,13 @@ export class RateLimiter {
     const now = Date.now();
     const elapsed = now - this.lastRefill;
     
-    if (elapsed >= this.windowMs) {
-      const refillAmount = Math.floor(elapsed / this.windowMs * this.maxPerSecond);
-      this.tokens = Math.min(this.maxBurst, this.tokens + refillAmount);
-      this.lastRefill = now;
+    // Refill tokens proportionally to elapsed time
+    const refillAmount = (elapsed / this.windowMs) * this.maxPerSecond;
+    if (refillAmount >= 1) {
+      const tokensToAdd = Math.floor(refillAmount);
+      this.tokens = Math.min(this.maxBurst, this.tokens + tokensToAdd);
+      // Update lastRefill only for the tokens we actually added
+      this.lastRefill += Math.floor(tokensToAdd * this.windowMs / this.maxPerSecond);
     }
   }
 

@@ -93,6 +93,11 @@ describe('Formatters', () => {
       formatter = new PrettyFormatter({ colors: false });
     });
 
+    it('should create formatter with default options', () => {
+      const defaultFormatter = new PrettyFormatter();
+      expect(defaultFormatter).toBeDefined();
+    });
+
     it('should format log entry in pretty format', () => {
       const result = formatter.format(mockEntry);
       
@@ -154,6 +159,45 @@ describe('Formatters', () => {
 
       const result = formatter.format(entry);
       expect(result).toContain('String error message');
+    });
+
+    it('should handle error without name or message (lines 110-111)', () => {
+      // Test with only name
+      const error1: any = { name: 'CustomError' };
+      const entry1: LogEntry = {
+        level: 'error',
+        time: Date.now(),
+        err: error1,
+        msg: 'Name only error'
+      };
+      
+      const result1 = formatter.format(entry1);
+      expect(result1).toContain('CustomError: Unknown error');
+      
+      // Test with only message
+      const error2: any = { message: 'Something went wrong' };
+      const entry2: LogEntry = {
+        level: 'error',
+        time: Date.now(),
+        err: error2,
+        msg: 'Message only error'
+      };
+      
+      const result2 = formatter.format(entry2);
+      expect(result2).toContain('Error: Something went wrong');
+      
+      // Test with neither (should not include error line)
+      const error3: any = {};
+      const entry3: LogEntry = {
+        level: 'error',
+        time: Date.now(),
+        err: error3,
+        msg: 'Empty error occurred'
+      };
+      
+      const result3 = formatter.format(entry3);
+      expect(result3).toContain('Empty error occurred');
+      expect(result3).not.toContain('Error:');
     });
 
     it('should include error code when present (line 116)', () => {
@@ -246,17 +290,23 @@ describe('Formatters', () => {
 
     it('should handle null and undefined values (line 55)', () => {
       const formatter = new CSVFormatter({
-        fields: ['level', 'nullField', 'undefinedField'],
+        fields: ['level', 'nullField', 'undefinedField', 'emptyField'],
         includeHeader: false
       });
       const result = formatter.format({
         level: 'info',
         time: Date.now(),
         nullField: null,
-        undefinedField: undefined
+        undefinedField: undefined,
+        emptyField: ''
       });
       
-      expect(result).toBe('info,,'); // Both null and undefined should become empty strings
+      expect(result).toBe('info,,,'); // Both null and undefined should become empty strings
+      
+      // Test escapeValue directly with null
+      const escapeValue = (formatter as any).escapeValue;
+      expect(escapeValue.call(formatter, null)).toBe('');
+      expect(escapeValue.call(formatter, undefined)).toBe('');
     });
 
     it('should escape values with special characters', () => {

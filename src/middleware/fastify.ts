@@ -142,11 +142,11 @@ function sanitizeBody(body: any): any {
   }
 
   const sanitized = { ...body };
-  const sensitiveFields = ['password', 'token', 'secret', 'authorization', 'api_key', 'apiKey'];
+  const sensitiveFields = ['password', 'token', 'secret', 'authorization', 'api_key', 'apikey'];
 
   const sanitizeObject = (obj: any) => {
     for (const key in obj) {
-      if (sensitiveFields.some(field => key.toLowerCase().includes(field))) {
+      if (sensitiveFields.some(field => key.toLowerCase().includes(field.toLowerCase()))) {
         obj[key] = '[REDACTED]';
       } else if (typeof obj[key] === 'object' && obj[key] !== null) {
         sanitizeObject(obj[key]);

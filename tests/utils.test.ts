@@ -366,8 +366,10 @@ describe('Utils', () => {
       
       // Test filled state (line 125)
       small.write(Buffer.from('X'.repeat(10)));
-      small.write(Buffer.from('Y')); // Trigger overwrite, will be filled=true
-      expect(small.getFreeSpace()).toBe(0);
+      // When buffer is full but not marked as filled yet
+      expect(small.getFreeSpace()).toBe(0); // No free space when writePos reaches size
+      small.write(Buffer.from('Y')); // This will trigger overwrite and set filled=true
+      expect(small.getFreeSpace()).toBe(0); // Still 0 when filled
       
       // Test writePos < readPos case (line 131)  
       small.clear();
@@ -625,6 +627,10 @@ describe('Utils', () => {
     });
 
     it('should handle pool exhaustion', () => {
+      // Mock console.warn to suppress output
+      const originalWarn = console.warn;
+      console.warn = jest.fn();
+      
       const objects = [];
       for (let i = 0; i < 15; i++) {
         objects.push(pool.acquire());
@@ -632,6 +638,13 @@ describe('Utils', () => {
       
       expect(pool.getActiveCount()).toBe(15);
       // Should still work even when exceeding max size
+      
+      // Verify console.warn was called 5 times (for objects 11-15)
+      expect(console.warn).toHaveBeenCalledTimes(5);
+      expect(console.warn).toHaveBeenCalledWith('Object pool exhausted, creating new object');
+      
+      // Restore console.warn
+      console.warn = originalWarn;
     });
 
     it('should clear the pool', () => {

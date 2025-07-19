@@ -24,6 +24,12 @@ describe('Logger', () => {
   });
 
   describe('basic logging', () => {
+    it('should create logger with default options', () => {
+      const defaultLogger = new Logger();
+      expect(defaultLogger).toBeDefined();
+      // Default level is 'info' as per constructor
+    });
+
     it('should log info messages', () => {
       logger.info('test message');
       expect(mockStream.logs.length).toBe(1);

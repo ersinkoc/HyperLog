@@ -75,8 +75,9 @@ export class Logger {
     if (this.options.metrics.enabled) {
       this.metricsAggregator = new MetricsAggregator();
       this.metricsInterval = setInterval(() => {
-        const metrics = this.metricsAggregator!.getSnapshot();
-        console.log('Metrics:', metrics);
+        // Metrics are collected but not logged automatically
+        // Use getMetrics() to retrieve them when needed
+        this.metricsAggregator!.getSnapshot();
       }, this.options.metrics.interval);
       
       // Ensure timer doesn't keep process alive in tests

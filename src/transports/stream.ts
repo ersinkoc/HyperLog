@@ -25,14 +25,29 @@ export class StreamTransport implements Transport {
     }
     
     this.formatter = new JSONFormatter();
+    
+    // Handle stream errors
+    if (this.stream && typeof this.stream.on === 'function') {
+      this.stream.on('error', (err) => {
+        console.error('Stream write error:', err);
+      });
+    }
   }
 
   write(entry: LogEntry): void {
-    const formatted = this.formatFunc 
-      ? this.formatFunc(entry)
-      : this.formatter.format(entry);
-    
-    this.stream.write(formatted + '\n');
+    try {
+      const formatted = this.formatFunc 
+        ? this.formatFunc(entry)
+        : this.formatter.format(entry);
+      
+      this.stream.write(formatted + '\n', (err) => {
+        if (err) {
+          console.error('Stream write error:', err);
+        }
+      });
+    } catch (err) {
+      console.error('Stream write error:', err);
+    }
   }
 
   close(): Promise<void> {

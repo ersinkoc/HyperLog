@@ -53,16 +53,20 @@ export function expressLogger(options: ExpressLoggerOptions = {}) {
     const requestData: Record<string, any> = {
       method: req.method,
       url: req.url,
-      path: req.path,
-      ip: req.ip
+      path: req.path || req.url,
+      ip: req.ip || (req as any).socket?.remoteAddress
     };
 
     if (includeQuery && Object.keys(req.query).length > 0) {
       requestData.query = req.query;
     }
 
-    if (includeBody && req.body && Object.keys(req.body).length > 0) {
-      requestData.body = sanitizeBody(req.body);
+    if (includeBody && req.body !== undefined) {
+      if (typeof req.body === 'object' && req.body !== null && Object.keys(req.body).length === 0) {
+        // Skip empty objects
+      } else {
+        requestData.body = sanitizeBody(req.body);
+      }
     }
 
     if (includeHeaders.length > 0) {
@@ -128,11 +132,11 @@ function sanitizeBody(body: any): any {
   }
 
   const sanitized = { ...body };
-  const sensitiveFields = ['password', 'token', 'secret', 'authorization', 'api_key', 'apiKey'];
+  const sensitiveFields = ['password', 'token', 'secret', 'authorization', 'api_key', 'apikey'];
 
   const sanitizeObject = (obj: any) => {
     for (const key in obj) {
-      if (sensitiveFields.some(field => key.toLowerCase().includes(field))) {
+      if (sensitiveFields.some(field => key.toLowerCase().includes(field.toLowerCase()))) {
         obj[key] = '[REDACTED]';
       } else if (typeof obj[key] === 'object' && obj[key] !== null) {
         sanitizeObject(obj[key]);

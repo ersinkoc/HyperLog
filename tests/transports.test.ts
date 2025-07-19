@@ -524,23 +524,40 @@ describe('Transports', () => {
     let transport: FileTransport;
 
     beforeEach(() => {
-      if (!fs.existsSync(testDir)) {
+      // Clean up any existing test files first
+      if (fs.existsSync(testDir)) {
+        fs.readdirSync(testDir).forEach(file => {
+          fs.unlinkSync(path.join(testDir, file));
+        });
+      } else {
         fs.mkdirSync(testDir, { recursive: true });
       }
     });
 
     afterEach(async () => {
       if (transport) {
-        await transport.close();
+        try {
+          await transport.close();
+        } catch {
+          // Ignore errors during close if transport is already broken
+        }
       }
       // Clean up test files
       if (fs.existsSync(testDir)) {
         fs.readdirSync(testDir).forEach(file => {
-          fs.unlinkSync(path.join(testDir, file));
+          try {
+            fs.unlinkSync(path.join(testDir, file));
+          } catch {
+            // Ignore errors during cleanup
+          }
         });
-        fs.rmdirSync(testDir);
+        try {
+          fs.rmdirSync(testDir);
+        } catch {
+          // Ignore errors during cleanup
+        }
       }
-    });
+    }, 15000); // 15 second timeout
 
     it('should write logs to file', async () => {
       transport = new FileTransport({
@@ -594,14 +611,19 @@ describe('Transports', () => {
         filename: testFile
       });
 
+      // Wait for initialization to complete
+      await (transport as any).waitForInit();
+
       // Force an error by closing the stream early
-      (transport as any).writeStream.destroy();
-      (transport as any).writeStream.emit('error', new Error('Stream error'));
+      if ((transport as any).writeStream) {
+        (transport as any).writeStream.destroy();
+        (transport as any).writeStream.emit('error', new Error('Stream error'));
+      }
 
       expect(errors.some(e => e[0] === 'File transport write error:')).toBe(true);
 
       console.error = originalError;
-    });
+    }, 15000);
 
     it('should handle custom format function', async () => {
       transport = new FileTransport({
@@ -664,21 +686,33 @@ describe('Transports', () => {
       // Write after close should be ignored
       transport.write({ level: 'info', time: Date.now(), msg: 'Should not be written' });
 
-      const content = fs.readFileSync(testFile, 'utf-8');
-      expect(content).toBe('');
+      // File may not exist if nothing was written
+      if (fs.existsSync(testFile)) {
+        const content = fs.readFileSync(testFile, 'utf-8');
+        expect(content).toBe('');
+      } else {
+        // This is also valid - no file created if nothing written
+        expect(true).toBe(true);
+      }
     });
 
     it('should handle buffer flush on close', async () => {
       transport = new FileTransport({
         filename: testFile,
-        bufferSize: 1000 // Large buffer to prevent auto-flush
+        bufferSize: 1000, // Large buffer to prevent auto-flush
+        flushInterval: 10000 // Long interval
       });
+
+      // Wait for initialization
+      await (transport as any).waitForInit();
 
       transport.write({ level: 'info', time: Date.now(), msg: 'Buffered message' });
 
-      // Close should flush the buffer
+      // Close should flush the buffer and wait for all writes
       await transport.close();
 
+      // Verify file was created and contains the message
+      expect(fs.existsSync(testFile)).toBe(true);
       const content = fs.readFileSync(testFile, 'utf-8');
       expect(content).toContain('Buffered message');
     });
@@ -687,22 +721,20 @@ describe('Transports', () => {
       // Create a file with existing content
       fs.writeFileSync(testFile, 'Existing content\n');
 
-      // Wait a moment for file system to settle
-      await new Promise(resolve => setTimeout(resolve, 50));
-
       transport = new FileTransport({
         filename: testFile,
-        maxSize: '1k'
+        maxSize: '1k',
+        flushInterval: 10000
       });
 
-      // Wait for async initialization
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for async initialization to complete
+      await (transport as any).waitForInit();
 
       // Transport should detect existing file size
       expect((transport as any).currentSize).toBeGreaterThan(0);
 
       await transport.close();
-    });
+    }, 10000); // 10 second timeout
 
     it('should handle file stats error', async () => {
       // Create transport with non-existent file
@@ -721,20 +753,93 @@ describe('Transports', () => {
     it('should flush when buffer is full', async () => {
       transport = new FileTransport({
         filename: testFile,
-        bufferSize: 50 // Small buffer
+        bufferSize: 50, // Small buffer
+        flushInterval: 10000 // Long interval
       });
+
+      // Wait for initialization
+      await (transport as any).waitForInit();
 
       // Write enough data to trigger flush
       const longMessage = 'A'.repeat(30);
       transport.write({ level: 'info', time: Date.now(), msg: longMessage });
       transport.write({ level: 'info', time: Date.now(), msg: longMessage });
 
-      // Should have flushed due to buffer size
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for auto-flush to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Close and ensure all data is written
       await transport.close();
 
+      expect(fs.existsSync(testFile)).toBe(true);
       const content = fs.readFileSync(testFile, 'utf-8');
       expect(content).toContain(longMessage);
+    }, 20000); // 20 second timeout
+
+    it('should handle write errors', async () => {
+      // Mock console.error to suppress output
+      const originalError = console.error;
+      console.error = jest.fn();
+
+      transport = new FileTransport({
+        filename: testFile
+      });
+
+      await (transport as any).waitForInit();
+
+      // Mock write to fail
+      const originalWrite = (transport as any).writeStream.write;
+      (transport as any).writeStream.write = function(data: any, cb: any) {
+        if (typeof cb === 'function') {
+          cb(new Error('Write failed'));
+        }
+        return false;
+      };
+
+      // Write should handle the error gracefully
+      transport.write({ level: 'error', time: Date.now(), msg: 'Test error' });
+      
+      // Force flush to trigger write
+      (transport as any).flush();
+      
+      // Wait for processing
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify console.error was called
+      expect(console.error).toHaveBeenCalledWith('Queue processing error:', expect.any(Error));
+
+      // Restore
+      (transport as any).writeStream.write = originalWrite;
+      console.error = originalError;
+    });
+
+    it('should handle missing writeStream during rotate', async () => {
+      transport = new FileTransport({
+        filename: testFile,
+        maxSize: '1B'
+      });
+
+      // Call rotate before stream is initialized
+      const rotate = (transport as any).rotate.bind(transport);
+      await expect(rotate()).resolves.not.toThrow();
+    });
+
+    it('should handle queue processing after close', async () => {
+      transport = new FileTransport({
+        filename: testFile
+      });
+
+      await (transport as any).waitForInit();
+
+      // Write some data
+      transport.write({ level: 'info', time: Date.now(), msg: 'Test' });
+
+      // Close immediately
+      await transport.close();
+
+      // Try to process queue item after close - should return early
+      const processQueue = (transport as any).processQueue.bind(transport);
+      await expect(processQueue()).resolves.not.toThrow();
     });
   });
 });

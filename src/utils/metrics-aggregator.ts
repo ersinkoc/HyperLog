@@ -115,7 +115,7 @@ export class MetricsAggregator {
     // Calculate throughput
     const avgThroughput = this.totalCount / (duration / 1000);
 
-    return {
+    const snapshot = {
       timestamp: now,
       duration,
       counts: {
@@ -132,6 +132,11 @@ export class MetricsAggregator {
         max: this.maxThroughput
       }
     };
+    
+    // Reset metrics after snapshot
+    this.reset();
+    
+    return snapshot;
   }
 
   reset(): void {
@@ -160,6 +165,10 @@ export class MetricsAggregator {
 
   // Export metrics in Prometheus format
   toPrometheus(prefix: string = 'hyperlog'): string {
+    // Save durations before getSnapshot resets them
+    const durationsSum = this.durations.reduce((a, b) => a + b, 0);
+    const durationsCount = this.durations.length;
+    
     const snapshot = this.getSnapshot();
     const lines: string[] = [];
 
@@ -192,8 +201,8 @@ export class MetricsAggregator {
       lines.push(`${prefix}_duration_milliseconds{quantile="0.5"} ${snapshot.performance.p50Duration}`);
       lines.push(`${prefix}_duration_milliseconds{quantile="0.95"} ${snapshot.performance.p95Duration}`);
       lines.push(`${prefix}_duration_milliseconds{quantile="0.99"} ${snapshot.performance.p99Duration}`);
-      lines.push(`${prefix}_duration_milliseconds_sum ${this.durations.reduce((a, b) => a + b, 0)}`);
-      lines.push(`${prefix}_duration_milliseconds_count ${this.durations.length}`);
+      lines.push(`${prefix}_duration_milliseconds_sum ${durationsSum}`);
+      lines.push(`${prefix}_duration_milliseconds_count ${durationsCount}`);
     }
 
     // Throughput

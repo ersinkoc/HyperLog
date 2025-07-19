@@ -30,6 +30,9 @@ export class FileTransport implements Transport {
   private bufferSize: number;
   private flushTimer?: NodeJS.Timeout;
   private closed: boolean = false;
+  private maxSize?: number;
+  private initPromise?: Promise<void>;
+  private initialized: boolean = false;
 
   constructor(options: FileTransportOptions) {
     this.options = options;
@@ -39,7 +42,12 @@ export class FileTransport implements Transport {
     this.writeQueue = new AsyncWriteQueue({ highWaterMark: 1000 });
     this.rotator = new FileRotator(options);
 
-    this.initializeStream();
+    // Parse and validate maxSize during construction
+    if (options.maxSize) {
+      this.maxSize = this.parseSize(options.maxSize);
+    }
+
+    this.initPromise = this.initializeStream();
     this.startFlushTimer();
   }
 
@@ -64,6 +72,14 @@ export class FileTransport implements Transport {
     } catch {
       this.currentSize = 0;
     }
+    
+    this.initialized = true;
+  }
+
+  async waitForInit(): Promise<void> {
+    if (this.initPromise) {
+      await this.initPromise;
+    }
   }
 
   write(entry: LogEntry): void {
@@ -72,7 +88,8 @@ export class FileTransport implements Transport {
     const formatted = this.formatEntry(entry);
     this.buffer.push(formatted);
 
-    if (this.buffer.join('').length >= this.bufferSize) {
+    const bufferLength = this.buffer.reduce((acc, item) => acc + item.length, 0);
+    if (bufferLength >= this.bufferSize) {
       this.flush();
     }
   }
@@ -87,7 +104,7 @@ export class FileTransport implements Transport {
   private flush(): void {
     if (this.buffer.length === 0) return;
 
-    const data = this.buffer.join('\n') + '\n';
+    const data = this.buffer.map(entry => entry.endsWith('\n') ? entry : entry + '\n').join('');
     this.buffer = [];
 
     this.writeQueue.enqueue({
@@ -100,7 +117,14 @@ export class FileTransport implements Transport {
 
   private async processQueue(): Promise<void> {
     await this.writeQueue.process(async (item) => {
-      if (this.closed || !this.writeStream) return;
+      if (this.closed) return;
+      
+      // Ensure initialization is complete
+      if (this.initPromise) {
+        await this.initPromise;
+      }
+      
+      if (!this.writeStream) return;
 
       await this.checkRotation(item.size);
 
@@ -117,10 +141,9 @@ export class FileTransport implements Transport {
   }
 
   private async checkRotation(nextSize: number): Promise<void> {
-    if (!this.options.maxSize) return;
+    if (!this.maxSize) return;
 
-    const maxSize = this.parseSize(this.options.maxSize);
-    if (this.currentSize + nextSize > maxSize) {
+    if (this.currentSize + nextSize > this.maxSize) {
       await this.rotate();
     }
   }
@@ -159,16 +182,32 @@ export class FileTransport implements Transport {
   }
 
   async close(): Promise<void> {
-    this.closed = true;
-
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
     }
 
+    // Ensure initialization is complete before closing
+    if (this.initPromise) {
+      try {
+        await this.initPromise;
+      } catch {
+        // Ignore init errors during close
+      }
+    }
+
+    // Flush any remaining buffered data
     this.flush();
+    
+    // Process any pending writes
+    await this.processQueue();
+    
+    // Mark as closed only after flushing
+    this.closed = true;
+    
+    // Drain the write queue
     await this.writeQueue.drain();
 
-    if (this.writeStream) {
+    if (this.writeStream && !this.writeStream.destroyed) {
       return new Promise((resolve) => {
         this.writeStream!.end(() => resolve());
       });

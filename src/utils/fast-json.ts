@@ -93,8 +93,13 @@ export class FastJSON {
     
     for (const field of priorityFields) {
       if (field in obj && obj[field] !== undefined) {
+        const val = obj[field];
+        // Skip functions and symbols
+        if (typeof val === 'function' || typeof val === 'symbol') {
+          continue;
+        }
         if (!first) result += ',';
-        result += `"${field}":${this.stringify(obj[field])}`;
+        result += `"${field}":${this.stringify(val)}`;
         first = false;
       }
     }
@@ -102,8 +107,13 @@ export class FastJSON {
     // Then other fields
     for (const key of keys) {
       if (!priorityFields.includes(key) && obj[key] !== undefined) {
+        const val = obj[key];
+        // Skip functions and symbols
+        if (typeof val === 'function' || typeof val === 'symbol') {
+          continue;
+        }
         if (!first) result += ',';
-        result += `"${key}":${this.stringify(obj[key])}`;
+        result += `"${key}":${this.stringify(val)}`;
         first = false;
       }
     }
